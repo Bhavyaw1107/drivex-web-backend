@@ -1,44 +1,30 @@
-import File from "../models/file.models.js";
-import { uploadToS3 } from "../services/file.service.js";
+const File = require("../models/file.models.js");
+const { uploadToS3 } = require("../services/file.service.js");
+const crypto = require("crypto");
 
-export const uploadFile = async (req, res) => {
+const generateHash = (buffer) => {
+  return crypto.createHash('md5').update(buffer).digest('hex');
+};
+
+// Upload file
+exports.uploadFile = async (req, res) => {
   try {
-    // 1. Generate hash from file
     const fileBuffer = req.file.buffer;
     const hash = generateHash(fileBuffer);
 
-    // 2. Check if file already exists
     const existingFile = await File.findOne({
-      name: req.file.originalname
+      filename: req.file.originalname,
+      folderId: req.body.folderId || null
     });
 
-    let conflict = false;
     let version = 1;
 
     if (existingFile) {
-      // 3. Compare versions
-      const incomingVersion = req.body.version || 1;
-      const latestVersionInDB = existingFile.version;
-
-      if (incomingVersion < latestVersionInDB) {
-        conflict = true;
-      }
-
-      version = latestVersionInDB + 1;
+      version = (existingFile.version || 1) + 1;
     }
 
-    // ❗ If conflict → return immediately
-    if (conflict) {
-      return res.json({
-        status: "conflict",
-        message: "File conflict detected"
-      });
-    }
-
-    // 4. Upload to S3
     const fileUrl = await uploadToS3(req.file);
 
-    // 5. Save / Update file
     let savedFile;
 
     if (existingFile) {
@@ -48,20 +34,102 @@ export const uploadFile = async (req, res) => {
       savedFile = await existingFile.save();
     } else {
       savedFile = await File.create({
-        name: req.file.originalname,
+        filename: req.file.originalname,
+        originalName: req.file.originalname,
+        mimeType: req.file.mimetype,
+        size: req.file.size,
         url: fileUrl,
-        version: 1,
+        folderId: req.body.folderId || null,
         hash: hash,
         status: "synced"
       });
     }
 
-    // 7. Response
     res.json({
       status: "uploaded",
       file: savedFile
     });
 
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Get files
+exports.getFiles = async (req, res) => {
+  try {
+    const { folderId } = req.query;
+    const query = folderId ? { folderId } : { folderId: null };
+    const files = await File.find(query).sort({ createdAt: -1 });
+    res.json({ files });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Get single file
+exports.getFile = async (req, res) => {
+  try {
+    const file = await File.findById(req.params.id);
+    if (!file) return res.status(404).json({ error: "File not found" });
+    res.json(file);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Get file URL
+exports.getFileUrl = async (req, res) => {
+  try {
+    const file = await File.findById(req.params.id);
+    if (!file) return res.status(404).json({ error: "File not found" });
+    res.json({ presignedUrl: file.url });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Update file
+exports.updateFile = async (req, res) => {
+  try {
+    const { filename, folderId } = req.body;
+    const updateData = {};
+    if (filename) updateData.filename = filename;
+    if (folderId !== undefined) updateData.folderId = folderId;
+
+    const file = await File.findByIdAndUpdate(
+      req.params.id,
+      updateData,
+      { new: true }
+    );
+    if (!file) return res.status(404).json({ error: "File not found" });
+    res.json(file);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Move file
+exports.moveFile = async (req, res) => {
+  try {
+    const { folderId } = req.body;
+    const file = await File.findByIdAndUpdate(
+      req.params.id,
+      { folderId: folderId || null },
+      { new: true }
+    );
+    if (!file) return res.status(404).json({ error: "File not found" });
+    res.json(file);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// Delete file
+exports.deleteFile = async (req, res) => {
+  try {
+    await File.findByIdAndDelete(req.params.id);
+    res.json({ message: "File deleted" });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
