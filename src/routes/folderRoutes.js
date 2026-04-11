@@ -1,4 +1,5 @@
 const express = require("express");
+const auth = require("../middleware/auth.js");
 const {
   createFolder,
   getFolders,
@@ -12,13 +13,13 @@ const {
 
 const router = express.Router();
 
-router.post("/", createFolder);
-router.get("/", getFolders);
-router.get("/:id", getFolder);
-router.get("/:id/breadcrumb", getBreadcrumb);
-router.put("/:id", renameFolder);
-router.put("/:id/move", moveFolder);
-router.delete("/:id", deleteFolder);
-router.delete("/:id/contents", deleteFolderContents);
+router.post("/", auth, createFolder);
+router.get("/", auth, getFolders);
+router.get("/:id", auth, getFolder);
+router.get("/:id/breadcrumb", auth, getBreadcrumb);
+router.put("/:id", auth, renameFolder);
+router.put("/:id/move", auth, moveFolder);
+router.delete("/:id", auth, deleteFolder);
+router.delete("/:id/contents", auth, deleteFolderContents);
 
 module.exports = router;

@@ -1,11 +1,24 @@
 const Folder = require("../models/folder.models.js");
 
+// Normalize folder response - convert _id to id
+const normalizeFolder = (folder) => {
+  if (!folder) return null;
+  return {
+    id: folder._id,
+    name: folder.name,
+    parentId: folder.parentId,
+    userId: folder.userId,
+    createdAt: folder.createdAt,
+    updatedAt: folder.updatedAt
+  };
+};
+
 // Create folder
 exports.createFolder = async (req, res) => {
   try {
     const { name, parentId } = req.body;
-    const folder = await Folder.create({ name, parentId: parentId || null });
-    res.status(201).json(folder);
+    const folder = await Folder.create({ name, parentId: parentId || null, userId: req.userId || null });
+    res.status(201).json(normalizeFolder(folder));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -15,9 +28,9 @@ exports.createFolder = async (req, res) => {
 exports.getFolders = async (req, res) => {
   try {
     const { parentId } = req.query;
-    const query = parentId ? { parentId } : { parentId: null };
+    const query = { parentId: parentId || null };
     const folders = await Folder.find(query).sort({ name: 1 });
-    res.json({ folders });
+    res.json({ folders: folders.map(normalizeFolder) });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -26,9 +39,9 @@ exports.getFolders = async (req, res) => {
 // Get single folder
 exports.getFolder = async (req, res) => {
   try {
-    const folder = await Folder.findById(req.params.id);
+    const folder = await Folder.findOne({ _id: req.params.id, userId: req.userId });
     if (!folder) return res.status(404).json({ error: "Folder not found" });
-    res.json(folder);
+    res.json(normalizeFolder(folder));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -43,7 +56,7 @@ exports.getBreadcrumb = async (req, res) => {
     while (currentId) {
       const folder = await Folder.findById(currentId);
       if (!folder) break;
-      breadcrumb.unshift({ id: folder._id, name: folder.name });
+      breadcrumb.unshift({ id: folder._id.toString(), name: folder.name });
       currentId = folder.parentId;
     }
 
@@ -57,13 +70,13 @@ exports.getBreadcrumb = async (req, res) => {
 exports.renameFolder = async (req, res) => {
   try {
     const { name } = req.body;
-    const folder = await Folder.findByIdAndUpdate(
-      req.params.id,
+    const folder = await Folder.findOneAndUpdate(
+      { _id: req.params.id, userId: req.userId },
       { name },
       { new: true }
     );
     if (!folder) return res.status(404).json({ error: "Folder not found" });
-    res.json(folder);
+    res.json(normalizeFolder(folder));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -73,13 +86,19 @@ exports.renameFolder = async (req, res) => {
 exports.moveFolder = async (req, res) => {
   try {
     const { parentId } = req.body;
-    const folder = await Folder.findByIdAndUpdate(
-      req.params.id,
+
+    // Prevent moving folder into itself
+    if (parentId && parentId.toString() === req.params.id.toString()) {
+      return res.status(400).json({ message: 'Cannot move folder into itself' });
+    }
+
+    const folder = await Folder.findOneAndUpdate(
+      { _id: req.params.id, userId: req.userId },
       { parentId: parentId || null },
       { new: true }
     );
     if (!folder) return res.status(404).json({ error: "Folder not found" });
-    res.json(folder);
+    res.json(normalizeFolder(folder));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -88,7 +107,8 @@ exports.moveFolder = async (req, res) => {
 // Delete folder
 exports.deleteFolder = async (req, res) => {
   try {
-    await Folder.findByIdAndDelete(req.params.id);
+    const folder = await Folder.findOneAndDelete({ _id: req.params.id, userId: req.userId });
+    if (!folder) return res.status(404).json({ error: "Folder not found" });
     res.json({ message: "Folder deleted" });
   } catch (error) {
     res.status(500).json({ error: error.message });

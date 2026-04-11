@@ -166,6 +166,46 @@ router.put('/:id', auth, async (req, res) => {
   }
 });
 
+// Move folder
+router.put('/:id/move', auth, async (req, res) => {
+  try {
+    const { parentId } = req.body;
+
+    // Prevent moving folder into itself
+    if (parentId && parentId.toString() === req.params.id.toString()) {
+      return res.status(400).json({ message: 'Cannot move folder into itself' });
+    }
+
+    // If moving to a parent folder, verify it exists and belongs to user
+    if (parentId) {
+      const parentFolder = await Folder.findOne({ _id: parentId, userId: req.userId });
+      if (!parentFolder) {
+        return res.status(404).json({ message: 'Target folder not found' });
+      }
+    }
+
+    const folder = await Folder.findOneAndUpdate(
+      { _id: req.params.id, userId: req.userId },
+      { parentId: parentId || null },
+      { new: true }
+    );
+
+    if (!folder) {
+      return res.status(404).json({ message: 'Folder not found' });
+    }
+
+    res.json({
+      id: folder._id,
+      name: folder.name,
+      parentId: folder.parentId,
+      createdAt: folder.createdAt
+    });
+  } catch (error) {
+    console.error('Move folder error:', error);
+    res.status(500).json({ message: 'Failed to move folder' });
+  }
+});
+
 // Delete folder (moves children to parent)
 router.delete('/:id', auth, async (req, res) => {
   try {
