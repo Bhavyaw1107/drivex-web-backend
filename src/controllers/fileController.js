@@ -6,6 +6,27 @@ const generateHash = (buffer) => {
   return crypto.createHash('md5').update(buffer).digest('hex');
 };
 
+// Normalize file response - convert _id to id
+const normalizeFile = (file) => {
+  if (!file) return null;
+  return {
+    id: file._id,
+    filename: file.filename,
+    originalName: file.originalName,
+    mimeType: file.mimeType,
+    size: file.size,
+    s3Url: file.url,
+    url: file.url,
+    folderId: file.folderId,
+    userId: file.userId,
+    status: file.status,
+    hash: file.hash,
+    version: file.version,
+    createdAt: file.createdAt,
+    updatedAt: file.updatedAt
+  };
+};
+
 // Upload file
 exports.uploadFile = async (req, res) => {
   try {
@@ -14,7 +35,8 @@ exports.uploadFile = async (req, res) => {
 
     const existingFile = await File.findOne({
       filename: req.file.originalname,
-      folderId: req.body.folderId || null
+      folderId: req.body.folderId || null,
+      userId: req.userId
     });
 
     let version = 1;
@@ -40,6 +62,7 @@ exports.uploadFile = async (req, res) => {
         size: req.file.size,
         url: fileUrl,
         folderId: req.body.folderId || null,
+        userId: req.userId || null,
         hash: hash,
         status: "synced"
       });
@@ -47,7 +70,7 @@ exports.uploadFile = async (req, res) => {
 
     res.json({
       status: "uploaded",
-      file: savedFile
+      file: normalizeFile(savedFile)
     });
 
   } catch (error) {
@@ -59,9 +82,9 @@ exports.uploadFile = async (req, res) => {
 exports.getFiles = async (req, res) => {
   try {
     const { folderId } = req.query;
-    const query = folderId ? { folderId } : { folderId: null };
+    const query = { folderId: folderId || null };
     const files = await File.find(query).sort({ createdAt: -1 });
-    res.json({ files });
+    res.json({ files: files.map(normalizeFile) });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -70,9 +93,9 @@ exports.getFiles = async (req, res) => {
 // Get single file
 exports.getFile = async (req, res) => {
   try {
-    const file = await File.findById(req.params.id);
+    const file = await File.findOne({ _id: req.params.id, userId: req.userId });
     if (!file) return res.status(404).json({ error: "File not found" });
-    res.json(file);
+    res.json(normalizeFile(file));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -81,7 +104,7 @@ exports.getFile = async (req, res) => {
 // Get file URL
 exports.getFileUrl = async (req, res) => {
   try {
-    const file = await File.findById(req.params.id);
+    const file = await File.findOne({ _id: req.params.id, userId: req.userId });
     if (!file) return res.status(404).json({ error: "File not found" });
     res.json({ presignedUrl: file.url });
   } catch (error) {
@@ -89,21 +112,17 @@ exports.getFileUrl = async (req, res) => {
   }
 };
 
-// Update file
+// Update file (rename)
 exports.updateFile = async (req, res) => {
   try {
-    const { filename, folderId } = req.body;
-    const updateData = {};
-    if (filename) updateData.filename = filename;
-    if (folderId !== undefined) updateData.folderId = folderId;
-
-    const file = await File.findByIdAndUpdate(
-      req.params.id,
-      updateData,
+    const { filename } = req.body;
+    const file = await File.findOneAndUpdate(
+      { _id: req.params.id, userId: req.userId },
+      { filename },
       { new: true }
     );
     if (!file) return res.status(404).json({ error: "File not found" });
-    res.json(file);
+    res.json(normalizeFile(file));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -113,13 +132,13 @@ exports.updateFile = async (req, res) => {
 exports.moveFile = async (req, res) => {
   try {
     const { folderId } = req.body;
-    const file = await File.findByIdAndUpdate(
-      req.params.id,
+    const file = await File.findOneAndUpdate(
+      { _id: req.params.id, userId: req.userId },
       { folderId: folderId || null },
       { new: true }
     );
     if (!file) return res.status(404).json({ error: "File not found" });
-    res.json(file);
+    res.json(normalizeFile(file));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -128,7 +147,8 @@ exports.moveFile = async (req, res) => {
 // Delete file
 exports.deleteFile = async (req, res) => {
   try {
-    await File.findByIdAndDelete(req.params.id);
+    const file = await File.findOneAndDelete({ _id: req.params.id, userId: req.userId });
+    if (!file) return res.status(404).json({ error: "File not found" });
     res.json({ message: "File deleted" });
   } catch (error) {
     res.status(500).json({ error: error.message });

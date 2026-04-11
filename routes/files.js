@@ -222,4 +222,42 @@ router.get('/:id/url', auth, async (req, res) => {
   }
 });
 
+// Move file to folder
+router.put('/:id/move', auth, async (req, res) => {
+  try {
+    const { folderId } = req.body;
+
+    // If moving to a folder, verify it exists and belongs to user
+    if (folderId) {
+      const folder = await Folder.findOne({ _id: folderId, userId: req.userId });
+      if (!folder) {
+        return res.status(404).json({ message: 'Target folder not found' });
+      }
+    }
+
+    const file = await File.findOneAndUpdate(
+      { _id: req.params.id, userId: req.userId },
+      { folderId: folderId || null },
+      { new: true }
+    );
+
+    if (!file) {
+      return res.status(404).json({ message: 'File not found' });
+    }
+
+    res.json({
+      id: file._id,
+      filename: file.originalName,
+      s3Url: file.s3Url,
+      mimeType: file.mimeType,
+      size: file.size,
+      folderId: file.folderId,
+      createdAt: file.createdAt
+    });
+  } catch (error) {
+    console.error('Move file error:', error);
+    res.status(500).json({ message: 'Failed to move file' });
+  }
+});
+
 module.exports = router;
