@@ -1,16 +1,13 @@
-import mongoose from "mongoose";
+const mongoose = require("mongoose");
 
-const extendfile = new mongoose.Schema({
-    
+const extendfileSchema = new mongoose.Schema({
   fileId: String,
-  userId: String,
+  userId: String, // should be clerkId
   filename: String,
   version: Number,
   lastModified: Date,
   hash: String,
   deviceId: String
+}, { timestamps: true });
 
-},{timestamps : true})
-
-
-export const Extendfile = mongoose.model('Extendfile',extendfile);
+module.exports = mongoose.model("Extendfile", extendfileSchema);

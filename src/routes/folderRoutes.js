@@ -1,5 +1,8 @@
 const express = require("express");
-const auth = require("../middleware/auth.js");
+const router = express.Router(); // ✅ FIRST
+
+const { requireAuth, attachUser } = require("../middleware/authMiddleware");
+
 const {
   createFolder,
   getFolders,
@@ -8,18 +11,32 @@ const {
   renameFolder,
   moveFolder,
   deleteFolder,
-  deleteFolderContents
+  deleteFolderContents,
+  toggleStarFolder,
+  getStarredFolders,
+  getRecentFolders,
+  getTrashFolders,
+  restoreFolder,
+  emptyTrashFolders
 } = require("../controllers/folderController.js");
 
-const router = express.Router();
+// ✅ Apply auth
+router.use(requireAuth, attachUser);
 
-router.post("/", auth, createFolder);
-router.get("/", auth, getFolders);
-router.get("/:id", auth, getFolder);
-router.get("/:id/breadcrumb", auth, getBreadcrumb);
-router.put("/:id", auth, renameFolder);
-router.put("/:id/move", auth, moveFolder);
-router.delete("/:id", auth, deleteFolder);
-router.delete("/:id/contents", auth, deleteFolderContents);
+// Routes
+router.get("/starred", getStarredFolders);
+router.get("/recent", getRecentFolders);
+router.get("/trash", getTrashFolders);
+router.post("/", createFolder);
+router.get("/", getFolders);
+router.delete("/trash/empty", emptyTrashFolders);
+router.get("/:id", getFolder);
+router.get("/:id/breadcrumb", getBreadcrumb);
+router.patch("/:id/star", toggleStarFolder);
+router.patch("/:id/restore", restoreFolder);
+router.put("/:id", renameFolder);
+router.put("/:id/move", moveFolder);
+router.delete("/:id", deleteFolder);
+router.delete("/:id/contents", deleteFolderContents);
 
 module.exports = router;

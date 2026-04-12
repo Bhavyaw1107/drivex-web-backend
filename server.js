@@ -1,50 +1,61 @@
 const express = require('express');
 const cors = require('cors');
-const dotenv = require('dotenv');
+require('dotenv').config();
 
-dotenv.config();
+const connectDB = require('./src/config/db');
 
-const app = express();
-const connectDB = require('./config/db');
-const authRoutes = require('./routes/auth');
-const fileRoutes = require('./routes/files');
-const folderRoutes = require('./routes/folders');
+// ✅ Clerk middleware
+const { clerk } = require('./src/middleware/authMiddleware');
 
-// CORS configuration
-const corsOptions = {
+const app = express(); // ✅ CREATE APP FIRST
+
+// ✅ APPLY CLERK AFTER APP
+app.use(clerk);
+
+// Middleware
+app.use(cors({
   origin: process.env.FRONTEND_URL || '*',
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-};
+}));
 
-app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Global error handler
-app.use((err, req, res, next) => {
-  console.error('Server error:', err);
-  res.status(500).json({
-    message: 'Internal server error',
-    error: process.env.NODE_ENV === 'development' ? err.message : undefined
-  });
-});
-
 // Routes
-app.use('/api/auth', authRoutes);
+const fileRoutes = require('./src/routes/fileRoutes');
+const folderRoutes = require('./src/routes/folderRoutes');
+
 app.use('/api/files', fileRoutes);
 app.use('/api/folders', folderRoutes);
 
+app.get('/', (req, res) => {
+  res.json({
+    name: 'DriveX API',
+    status: 'ok',
+    health: '/api/health',
+  });
+});
+
 // Health check
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: 'DriveX API is running' });
+  res.json({ status: 'ok' });
+});
+
+app.use((req, res) => {
+  res.status(404).json({ message: `Route not found: ${req.method} ${req.originalUrl}` });
+});
+
+// Error handler
+app.use((err, req, res, next) => {
+  console.error("SERVER ERROR:", err);
+  res.status(500).json({ message: 'Internal server error' });
 });
 
 const PORT = process.env.PORT || 5000;
 
+// Start server
 connectDB().then(() => {
   app.listen(PORT, () => {
-    console.log(`DriveX server running on port ${PORT}`);
+    console.log(`Server running on port ${PORT}`);
   });
 });
