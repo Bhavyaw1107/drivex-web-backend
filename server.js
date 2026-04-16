@@ -14,8 +14,8 @@ app.use(clerk);
 
 // Middleware
 app.use(cors({
-  origin: process.env.FRONTEND_URL || '*',
-  credentials: true,
+  origin: "http://localhost:8080",
+  credentials: true
 }));
 
 app.use(express.json());
@@ -27,6 +27,7 @@ const folderRoutes = require('./src/routes/folderRoutes');
 
 app.use('/api/files', fileRoutes);
 app.use('/api/folders', folderRoutes);
+
 
 app.get('/', (req, res) => {
   res.json({

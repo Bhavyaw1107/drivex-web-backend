@@ -1,4 +1,7 @@
-const s3 = require("../config/s3.js");
+const { PutObjectCommand, GetObjectCommand } = require("@aws-sdk/client-s3");
+const { Upload } = require("@aws-sdk/lib-storage");
+const { getSignedUrl } = require("@aws-sdk/s3-request-presigner");
+const s3Client = require("../config/s3.js");
 
 const uploadToS3 = async (file) => {
   const bucketName = process.env.AWS_BUCKET_NAME || process.env.AWS_BUCKET;
@@ -7,16 +10,21 @@ const uploadToS3 = async (file) => {
     throw new Error("AWS bucket name is not configured");
   }
 
-  const params = {
-    Bucket: bucketName,
-    Key: `${Date.now()}-${file.originalname}`,
-    Body: file.buffer,
-    ContentType: file.mimetype,
-  };
+  const key = `${Date.now()}-${file.originalname}`;
 
-  const data = await s3.upload(params).promise();
+  const upload = new Upload({
+    client: s3Client,
+    params: {
+      Bucket: bucketName,
+      Key: key,
+      Body: file.buffer,
+      ContentType: file.mimetype,
+    },
+  });
+
+  const data = await upload.done();
   return {
-    key: params.Key,
+    key: key,
     location: data.Location,
   };
 };
@@ -43,12 +51,13 @@ const getSignedFileUrl = async (file) => {
 
   const key = resolveObjectKey(file);
 
-  return s3.getSignedUrlPromise("getObject", {
+  const command = new GetObjectCommand({
     Bucket: bucketName,
     Key: key,
-    Expires: 60 * 10,
     ResponseContentDisposition: "inline",
   });
+
+  return getSignedUrl(s3Client, command, { expiresIn: 60 * 10 });
 };
 
 module.exports = {
