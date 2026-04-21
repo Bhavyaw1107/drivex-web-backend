@@ -15,7 +15,10 @@ app.use(clerkMiddleware());
 
 // Middleware
 app.use(cors({
-  origin: "http://localhost:5173",
+  origin: [
+    "http://localhost:5173",
+    "https://drivex-web-frontend-production.up.railway.app"
+  ],
   credentials: true
 }));
 
