@@ -8,6 +8,10 @@ const userSchema = new mongoose.Schema({
   },
   email: String,
   name: String,
+  isAdmin: {
+    type: Boolean,
+    default: false,
+  },
 }, {
   timestamps: true
 });

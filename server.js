@@ -5,12 +5,13 @@ require('dotenv').config();
 const connectDB = require('./src/config/db');
 
 // ✅ Clerk middleware
-const { clerk } = require('./src/middleware/authMiddleware');
+const { clerkMiddleware } = require('./src/middleware/authMiddleware');
 
 const app = express(); // ✅ CREATE APP FIRST
 
 // ✅ APPLY CLERK AFTER APP
-app.use(clerk);
+app.use(clerkMiddleware());
+
 
 // Middleware
 app.use(cors({
@@ -24,9 +25,11 @@ app.use(express.urlencoded({ extended: true }));
 // Routes
 const fileRoutes = require('./src/routes/fileRoutes');
 const folderRoutes = require('./src/routes/folderRoutes');
+const adminRoutes = require('./src/routes/adminRoutes');
 
 app.use('/api/files', fileRoutes);
 app.use('/api/folders', folderRoutes);
+app.use('/api/admin', adminRoutes);
 
 
 app.get('/', (req, res) => {
