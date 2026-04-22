@@ -1,34 +1,51 @@
 const File = require("../models/file.models.js");
-const { uploadToS3 } = require("../services/file.service.js");
+const { uploadToS3, getSignedFileUrl } = require("../services/file.service.js");
 const crypto = require("crypto");
 
 const generateHash = (buffer) => {
   return crypto.createHash('md5').update(buffer).digest('hex');
 };
 
-// Upload file
+const normalizeFile = (file) => ({
+  id: file._id,
+  filename: file.filename,
+  originalName: file.originalName,
+  mimeType: file.mimeType,
+  size: file.size,
+  url: file.url,
+  s3Key: file.s3Key,
+  folderId: file.folderId,
+  createdAt: file.createdAt,
+  updatedAt: file.updatedAt,
+  isStarred: file.isStarred || false,
+  deletedAt: file.deletedAt
+});
+
+// Upload
 exports.uploadFile = async (req, res) => {
   try {
-    const fileBuffer = req.file.buffer;
-    const hash = generateHash(fileBuffer);
+    if (!req.file) {
+      return res.status(400).json({ error: "No file uploaded" });
+    }
+
+    const hash = generateHash(req.file.buffer);
 
     const existingFile = await File.findOne({
       filename: req.file.originalname,
-      folderId: req.body.folderId || null
+      folderId: req.body.folderId || null,
+      owner: req.user.clerkId,
+      deletedAt: null
     });
 
-    let version = 1;
+    let version = existingFile ? (existingFile.version || 1) + 1 : 1;
 
-    if (existingFile) {
-      version = (existingFile.version || 1) + 1;
-    }
-
-    const fileUrl = await uploadToS3(req.file);
+    const uploadedFile = await uploadToS3(req.file);
 
     let savedFile;
 
     if (existingFile) {
-      existingFile.url = fileUrl;
+      existingFile.url = uploadedFile.location;
+      existingFile.s3Key = uploadedFile.key;
       existingFile.version = version;
       existingFile.hash = hash;
       savedFile = await existingFile.save();
@@ -38,20 +55,20 @@ exports.uploadFile = async (req, res) => {
         originalName: req.file.originalname,
         mimeType: req.file.mimetype,
         size: req.file.size,
-        url: fileUrl,
+        url: uploadedFile.location,
+        s3Key: uploadedFile.key,
         folderId: req.body.folderId || null,
-        hash: hash,
+        owner: req.user.clerkId,
+        hash,
         status: "synced"
       });
     }
 
-    res.json({
-      status: "uploaded",
-      file: savedFile
-    });
+    res.json({ file: normalizeFile(savedFile) });
 
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+  } catch (err) {
+    console.error("UPLOAD ERROR:", err);
+    res.status(500).json({ error: err.message });
   }
 };
 
@@ -59,78 +76,166 @@ exports.uploadFile = async (req, res) => {
 exports.getFiles = async (req, res) => {
   try {
     const { folderId } = req.query;
-    const query = folderId ? { folderId } : { folderId: null };
-    const files = await File.find(query).sort({ createdAt: -1 });
-    res.json({ files });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+
+    const files = await File.find({
+      folderId: folderId || null,
+      owner: req.user.clerkId,
+      deletedAt: null
+    });
+
+    res.json({ files: files.map(normalizeFile) });
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 };
 
-// Get single file
+// Get one
 exports.getFile = async (req, res) => {
-  try {
-    const file = await File.findById(req.params.id);
-    if (!file) return res.status(404).json({ error: "File not found" });
-    res.json(file);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+  const file = await File.findOne({
+    _id: req.params.id,
+    owner: req.user.clerkId
+  });
+
+  if (!file) return res.status(404).json({ error: "Not found" });
+
+  res.json(normalizeFile(file));
 };
 
-// Get file URL
+// URL
 exports.getFileUrl = async (req, res) => {
   try {
-    const file = await File.findById(req.params.id);
-    if (!file) return res.status(404).json({ error: "File not found" });
-    res.json({ presignedUrl: file.url });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+    const file = await File.findOne({
+      _id: req.params.id,
+      owner: req.user.clerkId
+    });
+
+    if (!file) return res.status(404).json({ error: "Not found" });
+
+    const presignedUrl = await getSignedFileUrl(file);
+
+    res.json({ presignedUrl });
+  } catch (err) {
+    console.error("GET FILE URL ERROR:", err);
+    res.status(500).json({ error: err.message });
   }
 };
 
-// Update file
+// Update
 exports.updateFile = async (req, res) => {
-  try {
-    const { filename, folderId } = req.body;
-    const updateData = {};
-    if (filename) updateData.filename = filename;
-    if (folderId !== undefined) updateData.folderId = folderId;
+  const file = await File.findOneAndUpdate(
+    { _id: req.params.id, owner: req.user.clerkId },
+    { filename: req.body.filename },
+    { new: true }
+  );
 
-    const file = await File.findByIdAndUpdate(
-      req.params.id,
-      updateData,
-      { new: true }
-    );
-    if (!file) return res.status(404).json({ error: "File not found" });
-    res.json(file);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+  if (!file) return res.status(404).json({ error: "Not found" });
+
+  res.json(normalizeFile(file));
 };
 
-// Move file
+// Move
 exports.moveFile = async (req, res) => {
-  try {
-    const { folderId } = req.body;
-    const file = await File.findByIdAndUpdate(
-      req.params.id,
-      { folderId: folderId || null },
-      { new: true }
-    );
-    if (!file) return res.status(404).json({ error: "File not found" });
-    res.json(file);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+  const file = await File.findOneAndUpdate(
+    { _id: req.params.id, owner: req.user.clerkId },
+    { folderId: req.body.folderId || null },
+    { new: true }
+  );
+
+  if (!file) return res.status(404).json({ error: "Not found" });
+
+  res.json(normalizeFile(file));
 };
 
-// Delete file
+// Delete (soft delete - move to trash)
 exports.deleteFile = async (req, res) => {
-  try {
-    await File.findByIdAndDelete(req.params.id);
-    res.json({ message: "File deleted" });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+  const file = await File.findOneAndUpdate(
+    { _id: req.params.id, owner: req.user.clerkId },
+    { deletedAt: new Date() },
+    { new: true }
+  );
+
+  res.json({ message: "Moved to trash" });
+};
+
+// Toggle star
+exports.toggleStarFile = async (req, res) => {
+  const file = await File.findOne({
+    _id: req.params.id,
+    owner: req.user.clerkId
+  });
+
+  if (!file) return res.status(404).json({ error: "Not found" });
+
+  file.isStarred = !file.isStarred;
+  await file.save();
+
+  res.json(normalizeFile(file));
+};
+
+// Get starred files
+exports.getStarredFiles = async (req, res) => {
+  const files = await File.find({
+    owner: req.user.clerkId,
+    isStarred: true,
+    deletedAt: null
+  });
+
+  res.json({ files: files.map(normalizeFile) });
+};
+
+// Get recent files (last 7 days)
+exports.getRecentFiles = async (req, res) => {
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+  const files = await File.find({
+    owner: req.user.clerkId,
+    createdAt: { $gte: sevenDaysAgo },
+    deletedAt: null
+  }).sort({ createdAt: -1 });
+
+  res.json({ files: files.map(normalizeFile) });
+};
+
+// Get trash files
+exports.getTrashFiles = async (req, res) => {
+  const query = {
+    owner: req.user.clerkId,
+  };
+
+  if (req.query.folderId) {
+    query.folderId = req.query.folderId;
+  } else {
+    query.deletedAt = { $ne: null };
   }
+
+  const files = await File.find(query).sort(
+    req.query.folderId ? { createdAt: -1 } : { deletedAt: -1 }
+  );
+
+  res.json({ files: files.map(normalizeFile) });
+};
+
+// Restore file from trash
+exports.restoreFile = async (req, res) => {
+  const file = await File.findOneAndUpdate(
+    { _id: req.params.id, owner: req.user.clerkId },
+    { deletedAt: null },
+    { new: true }
+  );
+
+  if (!file) return res.status(404).json({ error: "Not found" });
+
+  res.json(normalizeFile(file));
+};
+
+// Empty trash (permanent delete)
+exports.emptyTrashFiles = async (req, res) => {
+  await File.deleteMany({
+    owner: req.user.clerkId,
+    deletedAt: { $ne: null }
+  });
+
+  res.json({ message: "Trash emptied" });
 };

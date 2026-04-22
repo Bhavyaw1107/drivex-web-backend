@@ -1,6 +1,4 @@
-// backend/src/models/Version.js
-
-import mongoose from "mongoose";
+const mongoose = require("mongoose");
 
 const versionSchema = new mongoose.Schema({
   fileId: {
@@ -21,7 +19,7 @@ const versionSchema = new mongoose.Schema({
     default: Date.now
   },
   uploadedBy: {
-    type: String // later you can use userId
+    type: String // clerkId
   }
 });
 
