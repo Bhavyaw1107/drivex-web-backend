@@ -14,12 +14,9 @@ app.use(clerkMiddleware());
 
 
 // Middleware
+const corsOrigins = process.env.CORS_ORIGINS?.split(',').map(s => s.trim()) || [];
 app.use(cors({
-  origin: [
-    "http://localhost:5173",
-    "https://drivexcloud.tech",
-    "https://admin.drivexcloud.tech"
-  ],
+  origin: corsOrigins,
   credentials: true
 }));
 
