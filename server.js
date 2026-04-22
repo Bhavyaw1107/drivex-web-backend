@@ -17,7 +17,8 @@ app.use(clerkMiddleware());
 app.use(cors({
   origin: [
     "http://localhost:5173",
-    "https://drivex-web-frontend-production.up.railway.app"
+    "https://drivex-web-frontend-production.up.railway.app",
+    "https://drivex-web-frontend.onrender.com"
   ],
   credentials: true
 }));
