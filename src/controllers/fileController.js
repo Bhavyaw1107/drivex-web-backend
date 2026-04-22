@@ -77,11 +77,18 @@ exports.getFiles = async (req, res) => {
   try {
     const { folderId } = req.query;
 
-    const files = await File.find({
-      folderId: folderId || null,
+    const query = {
       owner: req.user.clerkId,
       deletedAt: null
-    });
+    };
+
+    if (folderId) {
+      query.folderId = folderId;
+    } else {
+      query.folderId = null;
+    }
+
+    const files = await File.find(query);
 
     res.json({ files: files.map(normalizeFile) });
 
@@ -92,6 +99,7 @@ exports.getFiles = async (req, res) => {
 
 // Get one
 exports.getFile = async (req, res) => {
+  if (!req.params.id) return res.status(400).json({ error: "File ID is required" });
   const file = await File.findOne({
     _id: req.params.id,
     owner: req.user.clerkId
@@ -104,6 +112,7 @@ exports.getFile = async (req, res) => {
 
 // URL
 exports.getFileUrl = async (req, res) => {
+  if (!req.params.id) return res.status(400).json({ error: "File ID is required" });
   try {
     const file = await File.findOne({
       _id: req.params.id,
@@ -123,6 +132,7 @@ exports.getFileUrl = async (req, res) => {
 
 // Update
 exports.updateFile = async (req, res) => {
+  if (!req.params.id) return res.status(400).json({ error: "File ID is required" });
   const file = await File.findOneAndUpdate(
     { _id: req.params.id, owner: req.user.clerkId },
     { filename: req.body.filename },
@@ -136,6 +146,7 @@ exports.updateFile = async (req, res) => {
 
 // Move
 exports.moveFile = async (req, res) => {
+  if (!req.params.id) return res.status(400).json({ error: "File ID is required" });
   const file = await File.findOneAndUpdate(
     { _id: req.params.id, owner: req.user.clerkId },
     { folderId: req.body.folderId || null },
@@ -149,17 +160,26 @@ exports.moveFile = async (req, res) => {
 
 // Delete (soft delete - move to trash)
 exports.deleteFile = async (req, res) => {
+  const fileId = req.params.id;
+
+  if (!fileId || fileId === "undefined" || fileId === "null") {
+    return res.status(400).json({ error: "File ID is required" });
+  }
+
   const file = await File.findOneAndUpdate(
-    { _id: req.params.id, owner: req.user.clerkId },
+    { _id: fileId, owner: req.user.clerkId },
     { deletedAt: new Date() },
     { new: true }
   );
+
+  if (!file) return res.status(404).json({ error: "Not found" });
 
   res.json({ message: "Moved to trash" });
 };
 
 // Toggle star
 exports.toggleStarFile = async (req, res) => {
+  if (!req.params.id) return res.status(400).json({ error: "File ID is required" });
   const file = await File.findOne({
     _id: req.params.id,
     owner: req.user.clerkId
@@ -219,6 +239,7 @@ exports.getTrashFiles = async (req, res) => {
 
 // Restore file from trash
 exports.restoreFile = async (req, res) => {
+  if (!req.params.id) return res.status(400).json({ error: "File ID is required" });
   const file = await File.findOneAndUpdate(
     { _id: req.params.id, owner: req.user.clerkId },
     { deletedAt: null },

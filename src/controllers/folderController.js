@@ -44,6 +44,7 @@ exports.getFolders = async (req, res) => {
 
 // Get one
 exports.getFolder = async (req, res) => {
+  if (!req.params.id) return res.status(400).json({ error: "Folder ID is required" });
   const folder = await Folder.findOne({
     _id: req.params.id,
     owner: req.user.clerkId
@@ -56,6 +57,7 @@ exports.getFolder = async (req, res) => {
 
 // Breadcrumb
 exports.getBreadcrumb = async (req, res) => {
+  if (!req.params.id) return res.status(400).json({ error: "Folder ID is required" });
   const breadcrumb = [];
   let current = req.params.id;
 
@@ -72,6 +74,7 @@ exports.getBreadcrumb = async (req, res) => {
 
 // Rename
 exports.renameFolder = async (req, res) => {
+  if (!req.params.id) return res.status(400).json({ error: "Folder ID is required" });
   const folder = await Folder.findOneAndUpdate(
     { _id: req.params.id, owner: req.user.clerkId },
     { name: req.body.name },
@@ -83,6 +86,7 @@ exports.renameFolder = async (req, res) => {
 
 // Move
 exports.moveFolder = async (req, res) => {
+  if (!req.params.id) return res.status(400).json({ error: "Folder ID is required" });
   const folder = await Folder.findOneAndUpdate(
     { _id: req.params.id, owner: req.user.clerkId },
     { parentId: req.body.parentId || null },
@@ -94,6 +98,7 @@ exports.moveFolder = async (req, res) => {
 
 // Delete (soft delete - move to trash)
 exports.deleteFolder = async (req, res) => {
+  if (!req.params.id) return res.status(400).json({ error: "Folder ID is required" });
   const folder = await Folder.findOneAndUpdate(
     { _id: req.params.id, owner: req.user.clerkId },
     { deletedAt: new Date() },
@@ -105,6 +110,7 @@ exports.deleteFolder = async (req, res) => {
 
 // Delete contents
 exports.deleteFolderContents = async (req, res) => {
+  if (!req.params.id) return res.status(400).json({ error: "Folder ID is required" });
   await Folder.deleteMany({ parentId: req.params.id });
 
   res.json({ message: "Deleted contents" });
@@ -112,6 +118,7 @@ exports.deleteFolderContents = async (req, res) => {
 
 // Toggle star
 exports.toggleStarFolder = async (req, res) => {
+  if (!req.params.id) return res.status(400).json({ error: "Folder ID is required" });
   const folder = await Folder.findOne({
     _id: req.params.id,
     owner: req.user.clerkId
@@ -171,6 +178,7 @@ exports.getTrashFolders = async (req, res) => {
 
 // Restore folder from trash
 exports.restoreFolder = async (req, res) => {
+  if (!req.params.id) return res.status(400).json({ error: "Folder ID is required" });
   const folder = await Folder.findOneAndUpdate(
     { _id: req.params.id, owner: req.user.clerkId },
     { deletedAt: null },

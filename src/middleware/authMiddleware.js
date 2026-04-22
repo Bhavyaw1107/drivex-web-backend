@@ -1,4 +1,4 @@
-const { getAuth, clerkMiddleware } = require('@clerk/express');
+const { getAuth, clerkMiddleware, clerkClient } = require('@clerk/express');
 const User = require('../models/User');
 
 const requireApiAuth = (req, res, next) => {
@@ -19,28 +19,26 @@ const attachUser = async (req, res, next) => {
   }
 
   const clerkId = auth.userId;
-  const email = auth.email || auth.externalAccount?.email;
-  const name = auth.fullName || auth.username || auth.firstName;
-
-  console.log("attachUser auth:", JSON.stringify({ clerkId, email, name, authKeys: Object.keys(auth) }));
-
-  if (!name) {
-    console.error("attachUser ERROR: name is empty. auth object:", JSON.stringify(auth));
-  }
 
   try {
+    // Fetch user details from Clerk API
+    const user = await clerkClient.users.getUser(clerkId);
+    const name = [user.firstName, user.lastName].filter(Boolean).join(' ') || 'User';
+    const email = user.emailAddresses[0]?.emailAddress || null;
+
     const result = await User.findOneAndUpdate(
       { clerkId },
-      { $set: { email: email || null, name: name || null } },
+      { $set: { email, name } },
       { upsert: true, new: true }
     );
     console.log("attachUser result:", result?._id, result?.email, result?.name);
+    req.user = { clerkId };
+    next();
   } catch (err) {
     console.error("USER SYNC ERROR:", err);
+    req.user = { clerkId };
+    next();
   }
-
-  req.user = { clerkId };
-  next();
 };
 
 module.exports = {
